@@ -292,9 +292,11 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     ke_bs = ke_b + ke_s
 
+    #remove zeros
     indices = [1:10; 13; 16]
     ke_bs = ke_bs[indices, indices]
 
+    #static condensation
     inda=1:9
     indi=10:12
     ke_bs = ke_bs[inda,inda]-ke_bs[inda,indi]*inv(ke_bs[indi,indi])*ke_bs[indi,inda]
