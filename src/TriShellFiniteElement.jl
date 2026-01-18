@@ -42,7 +42,9 @@ function Ferrite.reference_shape_value(ip::IP3, ξ::Vec{2}, shape_number::Int)
 end
 
 
-Ferrite.vertexdof_indices(::IP3) = ((1,2,3,4,5), (6,7,8,9,10), (11,12,13,14,15))
+# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,4,5), (6,7,8,9,10), (11,12,13,14,15))
+#organized by field u:1-9, θ:10-15
+# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,10,11), (4,5,6,12,13), (7,8,9,14,15))
 
 Ferrite.getnbasefunctions(::IP3) = 3
 
@@ -308,6 +310,10 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
     indwt=[3 4 5 8 9 10 13 14 15]
     ke[induv,induv]=ke_m
     ke[indwt,indwt]=ke_bs
+
+    #reorder from component to fields, Ferrite default 
+    ind_field = [1, 2, 3, 6, 7, 8, 11, 12, 13, 4, 5, 9, 10, 14, 15]
+    ke = ke[ind_field, ind_field]
 
     return ke 
 
