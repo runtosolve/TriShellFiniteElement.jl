@@ -24,7 +24,7 @@ close!(dh)
 # u_range = dof_range(dh, :u)
 # θ_range = dof_range(dh, :θ)
 
-# global_dofs = celldofs(dh, 2)
+global_dofs = celldofs(dh, 1)
 
 
 # ch = ConstraintHandler(dh)

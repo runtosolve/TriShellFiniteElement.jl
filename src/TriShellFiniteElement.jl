@@ -219,24 +219,24 @@ function calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x
             dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
             dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
                 
-            B_node_bending = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0     0.0
+            B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0     0.0
                                 dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         0.0     0.0]
 
             if i <= 3  
                 
                 N = Ferrite.reference_shape_value(ip_shape, ξ, i)
 
-                B_node_shear = [0.0     0.0     N
+                B_node += [0.0     0.0     N
                 
                                 0.0     -N      0.0]
 
-            else 
+            # else 
 
-                B_node_shear = zeros(Float64, 2, 3)
+            #     B_node_shear = zeros(Float64, 2, 3)
         
             end
         
-            B_node = B_node_bending .+ B_node_shear
+            # B_node = B_node_bending .+ B_node_shear
 
             push!(B_node_all, B_node)
 
