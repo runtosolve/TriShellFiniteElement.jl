@@ -320,17 +320,97 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 end
 
 
-function assemble_global!(K, dh, qr1, qr3, ip3, ip6, E, ν, t)
+function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
   
-    assembler = start_assemble(K)
+    assembler = start_assemble(Ke)
     for cell in CellIterator(dh)
         x = getcoordinates(cell) 
         ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
         assemble!(assembler, celldofs(cell), ke)
     end
-    return K
+    return Ke
 end
 
+
+####
+
+function generate_Nuvw_derivative(dNdξ_d)
+    
+    Nuvw_d = zeros(Float64, 3, 15)
+    Nuvw_d[1, 1:2:5] .= dNdξ_d
+    Nuvw_d[2, 2:2:6] .= dNdξ_d
+    Nuvw_d[3, 7:3:13] .= dNdξ_d
+
+    return Nuvw_d
+
+end
+
+
+function calculate_element_geometric_stiffness_matrix(cv, ip_geo, ip_shape, qr, x, σ)
+
+    reinit!(cv, x)
+
+    num_shape_functions = getnbasefunctions(ip_shape)
+
+    kgx = zeros(Float64, 15, 15)
+    kgy = zeros(Float64, 15, 15)
+    kgxy = zeros(Float64, 15, 15)
+    
+    for q_point in 1:getnquadpoints(cv)
+
+        ξ = qr.points[q_point]
+        J = TriShellFiniteElement.get_jacobian(ξ, ip_geo, x)
+        Jinv = inv(J)
+        
+        dNdξ_x = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1] for i=1:num_shape_functions]
+        dNdξ_y = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2] for i=1:num_shape_functions]
+
+        Nx = generate_Nuvw_derivative(dNdξ_x)
+        Ny = generate_Nuvw_derivative(dNdξ_y)
+
+        Nuvw_x = Nx .* Jinv[1, 1] + Ny .* Jinv[1, 2]
+        Nuvw_y = Nx .* Jinv[2, 1] + Ny .* Jinv[2, 2]
+
+        GGx = Nuvw_x' * Nuvw_x
+        GGy = Nuvw_y' * Nuvw_y
+        GGxy = Nuvw_x' * Nuvw_y + Nuvw_y' * Nuvw_x
+
+        kgx += GGx .* det(J) .* qr.weights[q_point]
+        kgy += GGy .* det(J) .* qr.weights[q_point]
+        kgxy += GGxy .* det(J) .* qr.weights[q_point]
+
+    end
+
+    #σ is local coordinate system stress, at  the Gauss point (constant stress in this case), σ = [σx, σy, σxy]
+    kg = σ[1] .* kgx + σ[2] .* kgy + σ[3] .* kgxy
+
+    return kg
+
+end
+
+
+function geometric_stiffness_matrix!(qr1, ip3, x, σ_element)
+
+    cv = CellValues(qr1, ip3, ip3) 
+    reinit!(cv, x)
+    kg = calculate_element_geometric_stiffness_matrix(cv, ip3, ip3, qr1, x, σ_element)
+
+    return kg 
+
+end
+
+
+function assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
+  
+    #need to convert global stress σ to local stress at some point 
+    assembler = start_assemble(K)
+    for cell in CellIterator(dh)
+        x = getcoordinates(cell)
+        kg = TriShellFiniteElement.geometric_stiffness_matrix!(qr1, ip3, x, σ[cell])
+        assemble!(assembler, celldofs(cell), kg)
+    end
+    return Kg
+end
 
 
 end # module TriShellFiniteElement
