@@ -7,51 +7,20 @@ t = 1.0
 ν = 0.30
 
 ######
-grid = generate_grid(Triangle, (1, 1), Vec((0.0, 0.0)), Vec((1.0, 1.0)));                      
+grid = generate_grid(Triangle, (1, 1), Vec((0.0, 0.0)), Vec((2.0, 1.0)));                      
 
+ip = Lagrange{RefTriangle,1}() #to define fields only 
 ip3 = TriShellFiniteElement.IP3()
 qr1 = QuadratureRule{RefTriangle}(1)  
 
-
-ip_geo = ip3 
-ip_shape = ip3
-qr = qr1
-
-cv = CellValues(qr1, ip3, ip3) 
-
-cell = first(CellIterator(grid))
-
-x = getcoordinates(cell) 
-reinit!(cv, x)
+dh = DofHandler(grid)
+add!(dh, :u, ip^3)
+add!(dh, :θ, ip^2)
+close!(dh)
 
 
-    ip_geo = TriShellFiniteElement.IP3() 
-    ip_shape = TriShellFiniteElement.IP3()
-    qr = QuadratureRule{RefTriangle}(1)  
+σ = [(-1.0, 0.0, 0.0) for i=1:getncells(grid)]
 
-    cv = CellValues(qr, ip_shape, ip_geo) 
+Kg = allocate_matrix(dh)
+TriShellFiniteElement.assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
 
-
-    kgx, kgy, kgxy = calculate_element_geometric_stiffness_matrix(cv, ip_geo, ip_shape, qr, x)
-
-
-
-
-i1=elems_row(1); i2=elems_row(2); i3=elems_row(3);
-P1=nodes(i1,1:3); P2=nodes(i2,1:3); P3=nodes(i3,1:3);
-
-
-norm_vec=cross(P2-P1,P3-P1);
-norm_vec=norm_vec/norm(norm_vec);
-j3=norm_vec
-j1=(P2-P1)/norm(P2-P1)
-j2=cross(j3,j1)
-T=[j1' j2' j3']
-
-
-P1a=T'*(P1-P1)';
-P2a=T'*(P2-P1)';
-P3a=T'*(P3-P1)';
-X1=P1a(1); Y1=P1a(2);
-X2=P2a(1); Y2=P2a(2);
-X3=P3a(1); Y3=P3a(2);

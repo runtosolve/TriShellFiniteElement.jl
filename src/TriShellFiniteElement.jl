@@ -403,11 +403,13 @@ end
 function assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
   
     #need to convert global stress σ to local stress at some point 
-    assembler = start_assemble(K)
+    assembler = start_assemble(Kg)
+    i = 1
     for cell in CellIterator(dh)
         x = getcoordinates(cell)
-        kg = TriShellFiniteElement.geometric_stiffness_matrix!(qr1, ip3, x, σ[cell])
+        kg = TriShellFiniteElement.geometric_stiffness_matrix!(qr1, ip3, x, σ[i])
         assemble!(assembler, celldofs(cell), kg)
+        i += 1
     end
     return Kg
 end
