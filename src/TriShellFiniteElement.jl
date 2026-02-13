@@ -389,9 +389,8 @@ function calculate_element_geometric_stiffness_matrix(cv, ip_geo, ip_shape, qr, 
 end
 
 
-function geometric_stiffness_matrix!(qr1, ip3, x, σ_element)
+function geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_element)
 
-    cv = CellValues(qr1, ip3, ip3) 
     reinit!(cv, x)
     kg = calculate_element_geometric_stiffness_matrix(cv, ip3, ip3, qr1, x, σ_element)
 
@@ -402,12 +401,13 @@ end
 
 function assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
   
+    cv = CellValues(qr1, ip3, ip3) 
     #need to convert global stress σ to local stress at some point 
     assembler = start_assemble(Kg)
     i = 1
     for cell in CellIterator(dh)
         x = getcoordinates(cell)
-        kg = TriShellFiniteElement.geometric_stiffness_matrix!(qr1, ip3, x, σ[i])
+        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ[i])
         assemble!(assembler, celldofs(cell), kg)
         i += 1
     end

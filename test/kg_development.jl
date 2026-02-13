@@ -19,7 +19,9 @@ add!(dh, :θ, ip^2)
 close!(dh)
 
 
+    # σx, σy, σxy right now these are in the element local coordinate system 
 σ = [(-1.0, 0.0, 0.0) for i=1:getncells(grid)]
+
 
 Kg = allocate_matrix(dh)
 TriShellFiniteElement.assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
