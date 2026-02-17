@@ -1,6 +1,6 @@
 module TriShellFiniteElement
 
-using Ferrite 
+using Ferrite, LinearAlgebra
 
 struct IP6 <: ScalarInterpolation{RefTriangle, 2}
 end
@@ -399,15 +399,48 @@ function geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_element)
 end
 
 
-function assemble_global_Kg!(Kg, dh, qr1, ip3, σ)
+
+
+
+
+
+function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
   
     cv = CellValues(qr1, ip3, ip3) 
     #need to convert global stress σ to local stress at some point 
     assembler = start_assemble(Kg)
     i = 1
     for cell in CellIterator(dh)
+
+        #need to bring x in as 3D points, in global coordinates 
+        
+        #then calculate rotation matrix 
+
+        #right now this is coming in as 2D, need to make it 3D 
         x = getcoordinates(cell)
-        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ[i])
+
+        #for now make 3D in this way, for a plate 
+        x3 = [Vec{3, Float64}([x[i]; 0.0]) for i in eachindex(x)]
+
+        P1 = x3[1]
+        P2 = x3[2]
+        P3 = x3[3]
+
+        norm_vec=cross(P2-P1,P3-P1);
+        norm_vec=norm_vec/norm(norm_vec)
+        j3=norm_vec
+        j1=(P2-P1)/norm(P2-P1)
+        j2=cross(j3,j1)
+        T=[j1 j2 j3]
+
+        str_mat_global = [σ_global[i][1] σ_global[i][3] 
+                          σ_global[i][3]    σ_global[i][2]]
+
+        str_mat_local =  T[1:2,1:2]' * str_mat_global * T[1:2, 1:2] 
+
+        σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
+
+        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_local[i])
         assemble!(assembler, celldofs(cell), kg)
         i += 1
     end
