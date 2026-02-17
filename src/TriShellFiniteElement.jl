@@ -440,7 +440,7 @@ function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
 
         σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
 
-        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_local[i])
+        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_local)
         assemble!(assembler, celldofs(cell), kg)
         i += 1
     end
