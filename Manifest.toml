@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "a99a32527c4423409d53e7b348fd68b43fc27b08"
+project_hash = "31814847de6f4ce87d333f5b1d80fb7e0adc3092"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -318,7 +318,7 @@ uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
 [[deps.TriShellFiniteElement]]
-deps = ["Ferrite"]
+deps = ["Ferrite", "LinearAlgebra"]
 path = "."
 uuid = "4f2873d8-418d-4a23-a33c-c2fdbebf1db2"
 version = "0.1.0"

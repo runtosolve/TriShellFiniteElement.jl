@@ -1,6 +1,6 @@
 module TriShellFiniteElement
 
-using Ferrite, LinearAlgebra
+using Ferrite, LinearAlgebra, Tensors
 
 struct IP6 <: ScalarInterpolation{RefTriangle, 2}
 end
@@ -324,9 +324,23 @@ function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
   
     assembler = start_assemble(Ke)
     for cell in CellIterator(dh)
-        x = getcoordinates(cell) 
-        ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
-        assemble!(assembler, celldofs(cell), ke)
+        # x = getcoordinates(cell) 
+
+        x_global = getcoordinates(cell)
+
+        T = calculation_rotation_matrix(x_global)
+
+        x_local = global_nodal_coords_to_planar_coords(x_global, T)
+
+        ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local)
+
+        #rotate ke matrix back to global coordinates! 
+
+        #rotate element stiffness matrix back to global coordinates! 
+        Te = rotation_matrix_for_element_stiffness(T)
+        ke_global = Te * ke * Te'
+
+        assemble!(assembler, celldofs(cell), ke_global)
     end
     return Ke
 end
@@ -412,26 +426,10 @@ function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
     i = 1
     for cell in CellIterator(dh)
 
-        #need to bring x in as 3D points, in global coordinates 
-        
-        #then calculate rotation matrix 
+        #3D
+        x_global = getcoordinates(cell)
 
-        #right now this is coming in as 2D, need to make it 3D 
-        x = getcoordinates(cell)
-
-        #for now make 3D in this way, for a plate 
-        x3 = [Vec{3, Float64}([x[i]; 0.0]) for i in eachindex(x)]
-
-        P1 = x3[1]
-        P2 = x3[2]
-        P3 = x3[3]
-
-        norm_vec=cross(P2-P1,P3-P1);
-        norm_vec=norm_vec/norm(norm_vec)
-        j3=norm_vec
-        j1=(P2-P1)/norm(P2-P1)
-        j2=cross(j3,j1)
-        T=[j1 j2 j3]
+        T = calculation_rotation_matrix(x_global)
 
         str_mat_global = [σ_global[i][1] σ_global[i][3] 
                           σ_global[i][3]    σ_global[i][2]]
@@ -440,12 +438,84 @@ function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
 
         σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
 
-        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_local)
-        assemble!(assembler, celldofs(cell), kg)
+        x_local = global_nodal_coords_to_planar_coords(x_global, T)
+
+        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x_local, σ_local)
+
+        #rotate element stiffness matrix back to global coordinates! 
+        Te = rotation_matrix_for_element_stiffness(T)
+        kg_global = Te * kg * Te'
+
+        assemble!(assembler, celldofs(cell), kg_global)
         i += 1
     end
     return Kg
 end
+
+
+function calculation_rotation_matrix(node)
+
+    P1 = node[1]
+    P2 = node[2]
+    P3 = node[3]
+
+    norm_vec=cross(P2-P1,P3-P1)
+    norm_vec=norm_vec/norm(norm_vec)
+    j3=norm_vec
+    j1=(P2-P1)/norm(P2-P1)
+    j2=cross(j3,j1)
+    T=[j1 j2 j3]
+
+    return T 
+
+end
+
+
+function global_nodal_coords_to_planar_coords(cell_nodes_global, T)
+
+    P1 = cell_nodes_global[1]
+    P2 = cell_nodes_global[2]
+    P3 = cell_nodes_global[3]
+
+    P1a=T'*(P1-P1)
+    P2a=T'*(P2-P1)
+    P3a=T'*(P3-P1)
+
+    cell_local = [P1a, P2a, P3a]
+
+    cell_nodes_local = [Tensors.Vec((cell_local[i][1], cell_local[i][2])) for i in eachindex(cell_local)]
+
+    return cell_nodes_local
+
+end
+
+
+function rotation_matrix_for_element_stiffness(T3)
+
+    #no drilling dof yet 
+    
+    T2=T3[1:2,1:2]
+
+    T = Matrix(1.0I, 15, 15)
+
+    ind=[1, 2, 3]
+    T[ind,ind] = T3
+    ind=[4 5 6]
+    T[ind,ind] = T3
+    ind=[7 8 9]
+    T[ind,ind] = T3
+    ind=[10, 11] 
+    T[ind,ind] = T2
+    ind=[12, 13] 
+    T[ind,ind] = T2
+    ind=[14, 15] 
+    T[ind,ind] = T2
+
+    return T 
+
+end
+
+
 
 
 end # module TriShellFiniteElement
