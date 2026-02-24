@@ -10,12 +10,12 @@ function Ferrite.reference_shape_value(ip::IP6, ξ::Vec{2}, shape_number::Int)
     ξ₁ = ξ[1]
     ξ₂ = ξ[2]
 
-    shape_number == 1 && return 1 - ξ₁ - ξ₂    
+    shape_number == 1 && return 1 - ξ₁ - ξ₂
     shape_number == 2 && return ξ₁
-    shape_number == 3 && return ξ₂ 
-    shape_number == 4 && return 4* ξ₁ * (1 - ξ₁ - ξ₂)   
-    shape_number == 5 && return 4 * ξ₁ * ξ₂ 
-    shape_number == 6 && return 4 * ξ₂ * (1 - ξ₁ - ξ₂)  
+    shape_number == 3 && return ξ₂
+    shape_number == 4 && return 4* ξ₁ * (1 - ξ₁ - ξ₂)
+    shape_number == 5 && return 4 * ξ₁ * ξ₂
+    shape_number == 6 && return 4 * ξ₂ * (1 - ξ₁ - ξ₂)
 
     throw(ArgumentError("no shape function $shape_number for interpolation $ip"))
 end
@@ -34,9 +34,9 @@ function Ferrite.reference_shape_value(ip::IP3, ξ::Vec{2}, shape_number::Int)
     ξ₁ = ξ[1]
     ξ₂ = ξ[2]
 
-    shape_number == 1 && return 1 - ξ₁ - ξ₂    
+    shape_number == 1 && return 1 - ξ₁ - ξ₂
     shape_number == 2 && return ξ₁
-    shape_number == 3 && return ξ₂ 
+    shape_number == 3 && return ξ₂
 
     throw(ArgumentError("no shape function $shape_number for interpolation $ip"))
 end
@@ -81,14 +81,14 @@ end
 function calculate_membrane_constitutive_matrix(E, ν, t)
 
     G=E/(2*(1+ν))
-    
-    D=[    E/(1-ν^2) ν*E/(1-ν^2)    0  
+
+    D=[    E/(1-ν^2) ν*E/(1-ν^2)    0
         ν*E/(1-ν^2)    E/(1-ν^2)    0
                 0             0    G]
-    
-    D = D .* t 
 
-    return D 
+    D = D .* t
+
+    return D
 
 end
 
@@ -102,7 +102,7 @@ function calculate_bending_constitutive_matrix(E, ν, t)
                     ν    1.0  0.0
                     0.0  0.0  (1-ν)/2]
 
-    return D 
+    return D
 
 end
 
@@ -111,11 +111,11 @@ end
 function calculate_shear_constitutive_matrix(E, ν, t)
 
     G=E/(2*(1+ν))
-    
-    D=[  5/6*G*t    0.0    
+
+    D=[  5/6*G*t    0.0
         0.0        5/6*G*t]
 
-    return D 
+    return D
 
 end
 
@@ -124,36 +124,36 @@ function calculate_element_membrane_stiffness_matrix(D, cv, ip_geo, ip_shape, qr
     num_shape_functions = getnbasefunctions(ip_shape)
 
     ke = zeros(Float64, 6, 6)
-    
+
 
     for q_point in 1:getnquadpoints(cv)
 
         ξ = qr.points[q_point]
         J = get_jacobian(ξ, ip_geo, x)
         Jinv = inv(J)
-       
+
         B_node_all = []
-    
-        for i in 1:3  
-       
+
+        for i in 1:3
+
             dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
             dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
 
             B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0
                         0.0                                       dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]
                         dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]]
-                
+
             push!(B_node_all, B_node)
 
         end
 
         B = hcat(B_node_all...)
-    
+
         ke += B' * D * B .* det(J) .* qr.weights[q_point]
 
     end
 
-    return ke 
+    return ke
 
 end
 
@@ -162,38 +162,38 @@ end
 function calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
 
     num_shape_functions = getnbasefunctions(ip_shape)
-   
+
     ke = zeros(Float64, 18, 18)
-   
+
     for q_point in 1:getnquadpoints(cv)
 
         ξ = qr.points[q_point]
         J = get_jacobian(ξ, ip_geo, x)
         Jinv = inv(J)
-       
+
         B_node_all = []
-    
-        for i in 1:3  
-       
+
+        for i in 1:3
+
             dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
             dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
 
             B_node = [0.0       0.0             dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]
                         0.0       -(dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2])  0.0
                         0.0       -(dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2])  dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]]
-                
+
             push!(B_node_all, B_node)
 
         end
 
         push!(B_node_all, zeros(3, 9))
         B = hcat(B_node_all...)
-  
+
         ke += B' * D * B .* det(J) .* qr.weights[q_point]
 
     end
 
-    return ke 
+    return ke
 
 end
 
@@ -201,9 +201,9 @@ end
 
 
 function calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
-   
+
     num_shape_functions = getnbasefunctions(ip_shape)
-    
+
     ke = zeros(Float64, 18, 18)
 
     for q_point in 1:getnquadpoints(cv)
@@ -211,44 +211,37 @@ function calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x
         ξ = qr.points[q_point]
         J = get_jacobian(ξ, ip_geo, x)
         Jinv = inv(J)
-       
+
         B_node_all = []
-    
+
         for i=1:num_shape_functions
-  
+
             dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
             dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
-                
+
             B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0     0.0
                                 dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         0.0     0.0]
 
-            if i <= 3  
-                
+            if i <= 3
+
                 N = Ferrite.reference_shape_value(ip_shape, ξ, i)
 
                 B_node += [0.0     0.0     N
-                
-                                0.0     -N      0.0]
+                           0.0     -N     0.0]
 
-            # else 
-
-            #     B_node_shear = zeros(Float64, 2, 3)
-        
             end
-        
-            # B_node = B_node_bending .+ B_node_shear
 
             push!(B_node_all, B_node)
 
         end
-                  
+
         B = hcat(B_node_all...)
-   
+
         ke += B' * D * B .* det(J) .* qr.weights[q_point]
 
     end
 
-    return ke 
+    return ke
 
 end
 
@@ -257,38 +250,38 @@ end
 function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     #####membrane
-    cv = CellValues(qr1, ip3, ip3) 
+    cv = CellValues(qr1, ip3, ip3)
     reinit!(cv, x)
-    
+
     Dm = TriShellFiniteElement.calculate_membrane_constitutive_matrix(E, ν, t)
 
-    D = Dm 
+    D = Dm
     ip_geo = ip3
-    ip_shape = ip3 
+    ip_shape = ip3
     qr = qr1
     ke_m = TriShellFiniteElement.calculate_element_membrane_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
 
     ######bending
-    cv = CellValues(qr1, ip3, ip3) 
+    cv = CellValues(qr1, ip3, ip3)
     reinit!(cv, x)
-    
+
     Db = TriShellFiniteElement.calculate_bending_constitutive_matrix(E, ν, t)
 
-    D = Db 
+    D = Db
     ip_geo = ip3
-    ip_shape = ip3 
+    ip_shape = ip3
     qr = qr1
     ke_b = TriShellFiniteElement.calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
 
     ######shear
-    cv = CellValues(qr3, ip6, ip3) 
+    cv = CellValues(qr3, ip6, ip3)
     reinit!(cv, x)
-    
+
     Ds = TriShellFiniteElement.calculate_shear_constitutive_matrix(E, ν, t)
 
     D = Ds
     ip_geo = ip3
-    ip_shape = ip6 
+    ip_shape = ip6
     qr = qr3
     ke_s = TriShellFiniteElement.calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
 
@@ -311,20 +304,19 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
     ke[induv,induv]=ke_m
     ke[indwt,indwt]=ke_bs
 
-    #reorder from component to fields, Ferrite default 
+    #reorder from component to fields, Ferrite default
     ind_field = [1, 2, 3, 6, 7, 8, 11, 12, 13, 4, 5, 9, 10, 14, 15]
     ke = ke[ind_field, ind_field]
 
-    return ke 
+    return ke
 
 end
 
 
 function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
-  
+
     assembler = start_assemble(Ke)
     for cell in CellIterator(dh)
-        # x = getcoordinates(cell) 
 
         x_global = getcoordinates(cell)
 
@@ -334,9 +326,7 @@ function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
 
         ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local)
 
-        #rotate ke matrix back to global coordinates! 
-
-        #rotate element stiffness matrix back to global coordinates! 
+        #rotate element stiffness matrix back to global coordinates!
         Te = rotation_matrix_for_element_stiffness(T)
         ke_global = Te * ke * Te'
 
@@ -349,7 +339,7 @@ end
 ####
 
 function generate_Nuvw_derivative(dNdξ_d)
-    
+
     Nuvw_d = zeros(Float64, 3, 15)
     Nuvw_d[1, 1:2:5] .= dNdξ_d
     Nuvw_d[2, 2:2:6] .= dNdξ_d
@@ -369,13 +359,13 @@ function calculate_element_geometric_stiffness_matrix(cv, ip_geo, ip_shape, qr, 
     kgx = zeros(Float64, 15, 15)
     kgy = zeros(Float64, 15, 15)
     kgxy = zeros(Float64, 15, 15)
-    
+
     for q_point in 1:getnquadpoints(cv)
 
         ξ = qr.points[q_point]
         J = TriShellFiniteElement.get_jacobian(ξ, ip_geo, x)
         Jinv = inv(J)
-        
+
         dNdξ_x = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1] for i=1:num_shape_functions]
         dNdξ_y = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2] for i=1:num_shape_functions]
 
@@ -408,20 +398,15 @@ function geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_element)
     reinit!(cv, x)
     kg = calculate_element_geometric_stiffness_matrix(cv, ip3, ip3, qr1, x, σ_element)
 
-    return kg 
+    return kg
 
 end
 
 
-
-
-
-
-
 function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
-  
-    cv = CellValues(qr1, ip3, ip3) 
-    #need to convert global stress σ to local stress at some point 
+
+    cv = CellValues(qr1, ip3, ip3)
+    #need to convert global stress σ to local stress at some point
     assembler = start_assemble(Kg)
     i = 1
     for cell in CellIterator(dh)
@@ -431,10 +416,10 @@ function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
 
         T = calculation_rotation_matrix(x_global)
 
-        str_mat_global = [σ_global[i][1] σ_global[i][3] 
-                          σ_global[i][3]    σ_global[i][2]]
+        str_mat_global = [σ_global[i][1] σ_global[i][3]
+                          σ_global[i][3] σ_global[i][2]]
 
-        str_mat_local =  T[1:2,1:2]' * str_mat_global * T[1:2, 1:2] 
+        str_mat_local =  T[1:2,1:2]' * str_mat_global * T[1:2, 1:2]
 
         σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
 
@@ -442,7 +427,7 @@ function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
 
         kg = geometric_stiffness_matrix!(cv, qr1, ip3, x_local, σ_local)
 
-        #rotate element stiffness matrix back to global coordinates! 
+        #rotate element stiffness matrix back to global coordinates!
         Te = rotation_matrix_for_element_stiffness(T)
         kg_global = Te * kg * Te'
 
@@ -466,7 +451,7 @@ function calculation_rotation_matrix(node)
     j2=cross(j3,j1)
     T=[j1 j2 j3]
 
-    return T 
+    return T
 
 end
 
@@ -492,8 +477,8 @@ end
 
 function rotation_matrix_for_element_stiffness(T3)
 
-    #no drilling dof yet 
-    
+    #no drilling dof yet
+
     T2=T3[1:2,1:2]
 
     T = Matrix(1.0I, 15, 15)
@@ -504,14 +489,14 @@ function rotation_matrix_for_element_stiffness(T3)
     T[ind,ind] = T3
     ind=[7 8 9]
     T[ind,ind] = T3
-    ind=[10, 11] 
+    ind=[10, 11]
     T[ind,ind] = T2
-    ind=[12, 13] 
+    ind=[12, 13]
     T[ind,ind] = T2
-    ind=[14, 15] 
+    ind=[14, 15]
     T[ind,ind] = T2
 
-    return T 
+    return T
 
 end
 
