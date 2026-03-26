@@ -119,37 +119,28 @@ function calculate_shear_constitutive_matrix(E, ν, t)
 
 end
 
-function calculate_element_membrane_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
-
-    num_shape_functions = getnbasefunctions(ip_shape)
+function calculate_element_membrane_stiffness_matrix(D, cv)
 
     ke = zeros(Float64, 6, 6)
     
+    dNdx = cv.fun_values.dNdx
 
     for q_point in 1:getnquadpoints(cv)
 
-        ξ = qr.points[q_point]
-        J = get_jacobian(ξ, ip_geo, x)
-        Jinv = inv(J)
-       
         B_node_all = []
     
         for i in 1:3  
-       
-            dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
-            dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
-
-            B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0
-                        0.0                                       dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]
-                        dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]]
                 
+            B_node = [dNdx[i][1]  0.0
+            0.0         dNdx[i][2]
+            dNdx[i][2]  dNdx[i][1]]            
+
             push!(B_node_all, B_node)
 
         end
 
         B = hcat(B_node_all...)
-    
-        ke += B' * D * B .* det(J) .* qr.weights[q_point]
+        ke += B' * D * B .* getdetJdV(cv, q_point) 
 
     end
 
@@ -257,16 +248,22 @@ end
 function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     #####membrane
+    println("x:", x)
+
     cv = CellValues(qr1, ip3, ip3) 
     reinit!(cv, x)
     
     Dm = TriShellFiniteElement.calculate_membrane_constitutive_matrix(E, ν, t)
+
+    println("Dm:", Dm)
 
     D = Dm 
     ip_geo = ip3
     ip_shape = ip3 
     qr = qr1
     ke_m = TriShellFiniteElement.calculate_element_membrane_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+
+    println("ke_m:", ke_m)
 
     ######bending
     cv = CellValues(qr1, ip3, ip3) 
@@ -327,10 +324,16 @@ function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
         # x = getcoordinates(cell) 
 
         x_global = getcoordinates(cell)
+        println("x_global:", x_global)
 
         T = calculation_rotation_matrix(x_global)
+        println("T:", T)
 
         x_local = global_nodal_coords_to_planar_coords(x_global, T)
+
+        println("x_local:", x_local)
+
+
 
         ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local)
 
