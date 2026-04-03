@@ -136,6 +136,12 @@ function calculate_element_membrane_stiffness_matrix(D, cv)
             0.0         dNdx[i][2]
             dNdx[i][2]  dNdx[i][1]]            
 
+                            #  B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0
+                    #     0.0                                       dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]
+                    #     dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]]
+
+
+
             push!(B_node_all, B_node)
 
         end
@@ -151,28 +157,36 @@ end
 
 
 
-function calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+function calculate_element_bending_stiffness_matrix(D, cv)
 
-    num_shape_functions = getnbasefunctions(ip_shape)
+    # num_shape_functions = getnbasefunctions(ip_shape)
 
     ke = zeros(Float64, 18, 18)
 
+     dNdx = cv.fun_values.dNdx
+
     for q_point in 1:getnquadpoints(cv)
 
-        ξ = qr.points[q_point]
-        J = get_jacobian(ξ, ip_geo, x)
-        Jinv = inv(J)
+        # ξ = qr.points[q_point]
+        # J = get_jacobian(ξ, ip_geo, x)
+        # Jinv = inv(J)
 
         B_node_all = []
 
         for i in 1:3
 
-            dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
-            dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
+            # dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
+            # dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
 
-            B_node = [0.0       0.0             dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]
-                        0.0       -(dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2])  0.0
-                        0.0       -(dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2])  dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]]
+            B_node = [0.0       0.0             dNdx[i][1]
+                        0.0       -dNdx[i][2]  0.0
+                        0.0       -dNdx[i][1]  dNdx[i][2]]
+
+
+            # B_node = [0.0       0.0             dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]
+            #             0.0       -(dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2])  0.0
+            #             0.0       -(dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2])  dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]]
+
 
             push!(B_node_all, B_node)
 
@@ -181,7 +195,9 @@ function calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr,
         push!(B_node_all, zeros(3, 9))
         B = hcat(B_node_all...)
 
-        ke += B' * D * B .* det(J) .* qr.weights[q_point]
+        println("B:", B)
+
+        ke += B' * D * B .* getdetJdV(cv, q_point) 
 
     end
 
@@ -192,31 +208,47 @@ end
 
 
 
-function calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+function calculate_element_shear_stiffness_matrix(D, cv)
 
-    num_shape_functions = getnbasefunctions(ip_shape)
+    num_shape_functions = getnbasefunctions(cv)
 
     ke = zeros(Float64, 18, 18)
 
+    dNdx = cv.fun_values.dNdx
+
+    println("dNdx:", dNdx)
+
     for q_point in 1:getnquadpoints(cv)
 
-        ξ = qr.points[q_point]
-        J = get_jacobian(ξ, ip_geo, x)
-        Jinv = inv(J)
+        # ξ = qr.points[q_point]
+        # J = get_jacobian(ξ, ip_geo, x)
+        # Jinv = inv(J)
+
+  
 
         B_node_all = []
 
         for i=1:num_shape_functions
 
-            dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
-            dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
+            # dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
+            # dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
 
-            B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0     0.0
-                                dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         0.0     0.0]
+            B_node = [dNdx[i, q_point][1]        0.0     0.0
+                      dNdx[i, q_point][2]         0.0     0.0]
+
+
+            #   B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0     0.0
+            #                     dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         0.0     0.0]
 
             if i <= 3
 
-                N = Ferrite.reference_shape_value(ip_shape, ξ, i)
+                N = Ferrite.shape_value(cv, q_point, i)
+
+            
+                    println("N " * string(i) * ":", N)
+                
+
+                # N = Ferrite.reference_shape_value(ip_shape, ξ, i)
 
                 B_node += [0.0     0.0     N
                            0.0     -N     0.0]
@@ -229,7 +261,21 @@ function calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x
 
         B = hcat(B_node_all...)
 
-        ke += B' * D * B .* det(J) .* qr.weights[q_point]
+        println("B_shear:", B)
+
+        # println("B' * D * B ", B' * D * B)
+
+        # ind=[1:10; 13; 16]
+        # BDB = B' * D * B
+        # BDB = BDB[ind, ind]
+
+        ke += B' * D * B .* getdetJdV(cv, q_point) 
+
+        #  ke += BDB .* getdetJdV(cv, q_point) 
+
+        # println("B' * D * B .* getdetJdV(cv, q_point):", B' * D * B .* getdetJdV(cv, q_point))
+
+        # println("getdetJdV(cv, q_point):", getdetJdV(cv, q_point))
 
     end
 
@@ -239,7 +285,7 @@ end
 
 
 
-function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
+function local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     #####membrane
     println("x:", x)
@@ -251,11 +297,11 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     println("Dm:", Dm)
 
-    D = Dm 
-    ip_geo = ip3
-    ip_shape = ip3
-    qr = qr1
-    ke_m = TriShellFiniteElement.calculate_element_membrane_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+    # D = Dm 
+    # ip_geo = ip3
+    # ip_shape = ip3
+    # qr = qr1
+    ke_m = TriShellFiniteElement.calculate_element_membrane_stiffness_matrix(Dm, cv)
 
     println("ke_m:", ke_m)
 
@@ -265,11 +311,17 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     Db = TriShellFiniteElement.calculate_bending_constitutive_matrix(E, ν, t)
 
-    D = Db
-    ip_geo = ip3
-    ip_shape = ip3
-    qr = qr1
-    ke_b = TriShellFiniteElement.calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+    # D = Db
+    # ip_geo = ip3
+    # ip_shape = ip3
+    # qr = qr1
+    ke_b = TriShellFiniteElement.calculate_element_bending_stiffness_matrix(Db, cv)
+
+    #remove zeros 
+    indices = [1:10; 13; 16]
+    ke_b = ke_b[indices, indices]
+
+     println("ke_b:", ke_b)
 
     ######shear
     cv = CellValues(qr3, ip6, ip3)
@@ -277,23 +329,36 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
 
     Ds = TriShellFiniteElement.calculate_shear_constitutive_matrix(E, ν, t)
 
-    D = Ds
-    ip_geo = ip3
-    ip_shape = ip6
-    qr = qr3
-    ke_s = TriShellFiniteElement.calculate_element_shear_stiffness_matrix(D, cv, ip_geo, ip_shape, qr, x)
+    # D = Ds
+    # ip_geo = ip3
+    # ip_shape = ip6
+    # qr = qr3
+    ke_s = TriShellFiniteElement.calculate_element_shear_stiffness_matrix(Ds, cv)
 
-    ke_bs = ke_b + ke_s
-
-    #remove zeros
+    #remove zeros 
     indices = [1:10; 13; 16]
-    ke_bs = ke_bs[indices, indices]
+    ke_s = ke_s[indices, indices]
 
-    #static condensation
+
+       #static condensation
     inda=1:9
     indi=10:12
-    ke_bs = ke_bs[inda,inda]-ke_bs[inda,indi]*inv(ke_bs[indi,indi])*ke_bs[indi,inda]
+    ke_s = ke_s[inda,inda]-ke_s[inda,indi]*inv(ke_s[indi,indi])*ke_s[indi,inda]
+    ke_b = ke_b[inda, inda]
 
+
+    #shear correction 
+    alpha=sum(diag(ke_s[4:9,4:9]))/sum(diag(ke_b[4:9,4:9]))
+    Cs=0.0
+    ke_bs=(1/(1+Cs*alpha))*ke_s + ke_b
+
+    # ke_bs = ke_b + ke_s
+
+    #remove zeros
+    # indices = [1:10; 13; 16]
+    # ke_bs = ke_bs[indices, indices]
+
+ 
 
     ke = zeros(Float64, 15, 15)
 
@@ -302,9 +367,37 @@ function elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x)
     ke[induv,induv]=ke_m
     ke[indwt,indwt]=ke_bs
 
-    #reorder from component to fields, Ferrite default
-    ind_field = [1, 2, 3, 6, 7, 8, 11, 12, 13, 4, 5, 9, 10, 14, 15]
-    ke = ke[ind_field, ind_field]
+    #add drilling dof 
+
+    k15 = ke
+
+    ind=[1:5; 7:11; 13:17]
+    k18 = zeros(Float64, 18, 18)
+    k18[ind,ind] = k15
+
+    kd = diag(k15)
+    ind=[4 5 9 10 14 15];
+    stif=minimum(kd[ind])/100;
+    k18[6,6] = stif;
+    k18[12,12] = stif;
+    k18[18,18] = stif;
+
+    # # transform stiffness matrix back to global X-Y-Z
+
+    # P1=nodes(i1,1:3); P2=nodes(i2,1:3); P3=nodes(i3,1:3);
+    # norm_vec=cross(P2-P1,P3-P1);
+    # norm_vec=norm_vec/norm(norm_vec);
+    # j3=norm_vec;
+    # j1=(P2-P1)/norm(P2-P1);
+    # j2=cross(j3,j1);
+    # T=[j1' j2' j3'];
+
+
+    # #reorder from component to fields, Ferrite default
+    # ind_field = [1, 2, 3, 6, 7, 8, 11, 12, 13, 4, 5, 9, 10, 14, 15]
+    # ke = ke[ind_field, ind_field]
+
+    ke = k18
 
     return ke
 
@@ -326,13 +419,15 @@ function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t)
 
         println("x_local:", x_local)
 
-
-
-        ke = TriShellFiniteElement.elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local)
+        ke_local = TriShellFiniteElement.local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local)
 
         #rotate element stiffness matrix back to global coordinates!
-        Te = rotation_matrix_for_element_stiffness(T)
-        ke_global = Te * ke * Te'
+        Te = rotation_matrix_for_element_stiffness_drilling(T)
+        ke_global = Te * ke_local * Te'
+
+        # #reorder from component to fields, Ferrite default
+        ind_field = [1, 2, 3, 7, 8, 9, 13, 14, 15, 4, 5, 6, 10, 11, 12, 16, 17, 18]
+        ke_global = ke_global[ind_field, ind_field]
 
         assemble!(assembler, celldofs(cell), ke_global)
     end
@@ -479,7 +574,7 @@ function global_nodal_coords_to_planar_coords(cell_nodes_global, T)
 end
 
 
-function rotation_matrix_for_element_stiffness(T3)
+function rotation_matrix_for_element_stiffness_no_drilling(T3)
 
     #no drilling dof yet
 
@@ -505,6 +600,30 @@ function rotation_matrix_for_element_stiffness(T3)
 end
 
 
+function rotation_matrix_for_element_stiffness_drilling(T3)
+
+    #no drilling dof yet
+
+    # T2=T3[1:2,1:2]
+
+    T = Matrix(1.0I, 18, 18)
+
+    ind=[1, 2, 3]
+    T[ind,ind] = T3
+    ind=[7, 8, 9]
+    T[ind,ind] = T3
+    ind=[13, 14, 15]
+    T[ind,ind] = T3
+    ind=[4, 5, 6]
+    T[ind,ind] = T3
+    ind=[10, 11, 12]
+    T[ind,ind] = T3
+    ind=[16, 17, 18]
+    T[ind,ind] = T3
+
+    return T
+
+end
 
 
 end # module TriShellFiniteElement

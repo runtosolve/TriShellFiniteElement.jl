@@ -39,7 +39,7 @@ qr3 = QuadratureRule{RefTriangle}(2)
 
 dh = DofHandler(grid)
 add!(dh, :u, ip^3)
-add!(dh, :θ, ip^2)
+add!(dh, :θ, ip^3)
 close!(dh)
 
 Ke = allocate_matrix(dh)

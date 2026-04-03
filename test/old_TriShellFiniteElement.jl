@@ -136,6 +136,12 @@ function calculate_element_membrane_stiffness_matrix(D, cv)
             0.0         dNdx[i][2]
             dNdx[i][2]  dNdx[i][1]]            
 
+
+                    #  B_node = [dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]         0.0
+                    #     0.0                                       dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]
+                    #     dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]         dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]]
+
+
             push!(B_node_all, B_node)
 
         end
@@ -157,22 +163,29 @@ function calculate_element_bending_stiffness_matrix(D, cv, ip_geo, ip_shape, qr,
 
     ke = zeros(Float64, 18, 18)
 
+     dNdx = cv.fun_values.dNdx
+
+
     for q_point in 1:getnquadpoints(cv)
 
-        ξ = qr.points[q_point]
-        J = get_jacobian(ξ, ip_geo, x)
-        Jinv = inv(J)
+        # ξ = qr.points[q_point]
+        # J = get_jacobian(ξ, ip_geo, x)
+        # Jinv = inv(J)
 
         B_node_all = []
 
         for i in 1:3
 
-            dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
-            dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
+            # dNdξ1 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1]
+            # dNdξ2 = cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2]
 
             B_node = [0.0       0.0             dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]
                         0.0       -(dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2])  0.0
                         0.0       -(dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2])  dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]]
+
+            # B_node = [0.0       0.0             dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2]
+            #             0.0       -(dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2])  0.0
+            #             0.0       -(dNdξ1*Jinv[1,1] + dNdξ2*Jinv[1,2])  dNdξ1*Jinv[2,1] + dNdξ2*Jinv[2,2]]
 
             push!(B_node_all, B_node)
 
