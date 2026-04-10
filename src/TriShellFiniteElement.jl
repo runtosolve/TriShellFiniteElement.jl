@@ -449,92 +449,215 @@ function generate_Nuvw_derivative(dNdξ_d)
 end
 
 
-function calculate_element_geometric_stiffness_matrix(cv, ip_geo, ip_shape, qr, x, σ)
+function calculate_element_geometric_stiffness_matrix(cv, σxx, σyy, τxy, T)
 
-    reinit!(cv, x)
+    # reinit!(cv, x)
 
-    num_shape_functions = getnbasefunctions(ip_shape)
+    # num_shape_functions = getnbasefunctions(ip_shape)
 
-    kgx = zeros(Float64, 15, 15)
-    kgy = zeros(Float64, 15, 15)
-    kgxy = zeros(Float64, 15, 15)
+    # kgx = zeros(Float64, 15, 15)
+    # kgy = zeros(Float64, 15, 15)
+    # kgxy = zeros(Float64, 15, 15)
+
+    kuv = zeros(Float64, 6, 6)
+    kwt = zeros(Float64, 9, 9)
+    kg = zeros(Float64, 15, 15)
+
+    dNdx = cv.fun_values.dNdx
+
+    println("dNdx:", dNdx)
 
     for q_point in 1:getnquadpoints(cv)
 
-        ξ = qr.points[q_point]
-        J = TriShellFiniteElement.get_jacobian(ξ, ip_geo, x)
-        Jinv = inv(J)
+        # ξ = qr.points[q_point]
+        # J = TriShellFiniteElement.get_jacobian(ξ, ip_geo, x)
+        # Jinv = inv(J)
 
-        dNdξ_x = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1] for i=1:num_shape_functions]
-        dNdξ_y = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2] for i=1:num_shape_functions]
+        # dNdξ_x = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][1] for i=1:num_shape_functions]
+        # dNdξ_y = [cv.fun_values.dNdξ[i + (q_point-1)*num_shape_functions][2] for i=1:num_shape_functions]
 
-        Nx = generate_Nuvw_derivative(dNdξ_x)
-        Ny = generate_Nuvw_derivative(dNdξ_y)
+        # Nx = generate_Nuvw_derivative(dNdξ_x)
+        # Ny = generate_Nuvw_derivative(dNdξ_y)
 
-        Nuvw_x = Nx .* Jinv[1, 1] + Ny .* Jinv[1, 2]
-        Nuvw_y = Nx .* Jinv[2, 1] + Ny .* Jinv[2, 2]
 
-        GGx = Nuvw_x' * Nuvw_x
-        GGy = Nuvw_y' * Nuvw_y
-        GGxy = Nuvw_x' * Nuvw_y + Nuvw_y' * Nuvw_x
+        dNx = [dNdx[1, q_point][1]  0.0 dNdx[2, q_point][1] 0.0 dNdx[3, q_point][1] 0.0 
+                0.0  dNdx[1, q_point][1]    0.0 dNdx[2, q_point][1] 0.0 dNdx[3, q_point][1] ]
 
-        kgx += GGx .* det(J) .* qr.weights[q_point]
-        kgy += GGy .* det(J) .* qr.weights[q_point]
-        kgxy += GGxy .* det(J) .* qr.weights[q_point]
+        println("dNx_uv:", dNx)
+
+        dNy = [dNdx[1, q_point][2]  0.0 dNdx[2, q_point][2] 0.0 dNdx[3, q_point][2] 0.0 
+            0.0  dNdx[1, q_point][2]    0.0 dNdx[2, q_point][2] 0.0 dNdx[3, q_point][2] ]
+
+        println("dNy_uv:", dNy)
+
+           GGuvx=dNx'*dNx;
+            GGuvy=dNy'*dNy;
+            GGuvxy=dNx'*dNy+dNy'*dNx;
+
+
+              println("GGuvx:", GGuvx)
+              println("GGuvy:", GGuvy)
+              println("GGuvxy:", GGuvxy)
+
+        # dNx[1, 1] = dNdx[1, q_point][1] 
+        # dNx[1, 4] = dNdx[2, q_point][1]    
+        # dNx[1, 7] = dNdx[3, q_point][1] 
+
+        # dNy = zeros(Float64, 3, 9)
+
+        # dNy[1, 1] = dNdx[1, q_point][2] 
+        # dNy[1, 4] = dNdx[2, q_point][2]    
+        # dNy[1, 7] = dNdx[3, q_point][2] 
+
+
+
+
+
+
+        dNx = zeros(Float64, 3, 9)
+
+        dNx[1, 1] = dNdx[1, q_point][1] 
+        dNx[1, 4] = dNdx[2, q_point][1]    
+        dNx[1, 7] = dNdx[3, q_point][1] 
+
+        dNy = zeros(Float64, 3, 9)
+
+        dNy[1, 1] = dNdx[1, q_point][2] 
+        dNy[1, 4] = dNdx[2, q_point][2]    
+        dNy[1, 7] = dNdx[3, q_point][2] 
+
+        GGwtx=dNx'*dNx;
+        GGwty=dNy'*dNy;
+        GGwtxy=dNx'*dNy+dNy'*dNx;
+
+                println("GGwtx:", GGwtx)
+              println("GGwty:", GGwty)
+              println("GGwtxy:", GGwtxy)
+
+
+        # str_mat = [σxx[q_point]     τxy[q_point]
+        #            τxy[q_point]     σyy[q_point]]
+
+  
+        # str_mat = T[1:2, 1:2]' * str_mat * T[1:2, 1:2]
+
+        str_vec=[σxx[q_point], σyy[q_point], τxy[q_point]]
+
+        println("str_vec", str_vec)
+     
+        c=T[1,1] 
+        s=T[2,1]
+        T2=[c^2 s^2 2*s*c; s^2 c^2 -2*s*c; -s*c s*c c^2-s^2]
+        str_vec=T2*str_vec;
+
+        println("T2", T2)
+        println("str_vec_trans", str_vec)
+
+        kuv += (GGuvx*str_vec[1] + GGuvy*str_vec[2] + GGuvxy*str_vec[3] ) * getdetJdV(cv, q_point) 
+        kwt += (GGwtx*str_vec[1] + GGwty*str_vec[2] + GGwtxy*str_vec[3] ) * getdetJdV(cv, q_point) 
 
     end
 
-    #σ is local coordinate system stress, at  the Gauss point (constant stress in this case), σ = [σx, σy, σxy]
-    kg = σ[1] .* kgx + σ[2] .* kgy + σ[3] .* kgxy
+    induv = [1 2 6 7 11 12]
+    indwt = [3 4 5 8 9 10 13 14 15]
+    kg[induv,induv] = kuv
+    kg[indwt,indwt] = kwt
 
     return kg
 
 end
 
 
-function geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_element)
+# function geometric_stiffness_matrix!(cv, qr1, ip3, x, σ_element)
 
-    reinit!(cv, x)
-    kg = calculate_element_geometric_stiffness_matrix(cv, ip3, ip3, qr1, x, σ_element)
+#     reinit!(cv, x)
+#     kg = calculate_element_geometric_stiffness_matrix(cv, ip3, ip3, qr1, x, σ_element)
 
-    return kg
+#     return kg
 
-end
+# end
 
 
-function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
 
-    cv = CellValues(qr1, ip3, ip3)
-    #need to convert global stress σ to local stress at some point
+function assemble_global_Kg!(Kg, dh, σXX, σYY, τXY)
+
     assembler = start_assemble(Kg)
     i = 1
     for cell in CellIterator(dh)
 
-        #3D
         x_global = getcoordinates(cell)
+        println("x_global:", x_global)
 
         T = calculation_rotation_matrix(x_global)
-
-        str_mat_global = [σ_global[i][1] σ_global[i][3]
-                          σ_global[i][3] σ_global[i][2]]
-
-        str_mat_local =  T[1:2,1:2]' * str_mat_global * T[1:2, 1:2]
-
-        σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
+        println("T:", T)
 
         x_local = global_nodal_coords_to_planar_coords(x_global, T)
 
-        kg = geometric_stiffness_matrix!(cv, qr1, ip3, x_local, σ_local)
+        println("x_local:", x_local)
+
+
+        #convert stresses from global coordinate system to local coordinate system 
+
+        σXX_element = σXX[i]
+        σYY_element = σYY[i]
+        τXY_element = τXY[i]
+
+        σxx_element
+        σyy_element
+        τxy_element
+
+
+        kg_local = calculate_element_geometric_stiffness_matrix(cv, σxx_element, σyy_element, τxy_element, T)
 
         #rotate element stiffness matrix back to global coordinates!
-        Te = rotation_matrix_for_element_stiffness(T)
-        kg_global = Te * kg * Te'
+        Te = rotation_matrix_for_element_stiffness_drilling(T)
+        kg_global = Te * kg_local * Te'
+
+        # #reorder from component to fields, Ferrite default
+        ind_field = [1, 2, 3, 7, 8, 9, 13, 14, 15, 4, 5, 6, 10, 11, 12, 16, 17, 18]
+        kg_global = kg_global[ind_field, ind_field]
 
         assemble!(assembler, celldofs(cell), kg_global)
-        i += 1
     end
     return Kg
 end
+
+
+
+
+# function assemble_global_Kg!(Kg, dh, qr1, ip3, σ_global)
+
+#     cv = CellValues(qr1, ip3, ip3)
+#     #need to convert global stress σ to local stress at some point
+#     assembler = start_assemble(Kg)
+#     i = 1
+#     for cell in CellIterator(dh)
+
+#         #3D
+#         x_global = getcoordinates(cell)
+
+#         T = calculation_rotation_matrix(x_global)
+
+#         str_mat_global = [σ_global[i][1] σ_global[i][3]
+#                           σ_global[i][3] σ_global[i][2]]
+
+#         str_mat_local =  T[1:2,1:2]' * str_mat_global * T[1:2, 1:2]
+
+#         σ_local = [str_mat_local[1, 1], str_mat_local[2, 2], str_mat_local[1, 2]]
+
+#         x_local = global_nodal_coords_to_planar_coords(x_global, T)
+
+#         kg = geometric_stiffness_matrix!(cv, qr1, ip3, x_local, σ_local)
+
+#         #rotate element stiffness matrix back to global coordinates!
+#         Te = rotation_matrix_for_element_stiffness(T)
+#         kg_global = Te * kg * Te'
+
+#         assemble!(assembler, celldofs(cell), kg_global)
+#         i += 1
+#     end
+#     return Kg
+# end
 
 
 function calculation_rotation_matrix(node)
