@@ -36,7 +36,7 @@ The local element stiffness is assembled from:
 | Contribution | Matrix size | Notes |
 |---|---|---|
 | Membrane | 6×6 | Plane stress, 3 nodes × 2 DOF |
-| Bending | 12×12 | Plate bending, 3 nodes × 4 DOF |
+| Bending | 9×9 | Plate bending, 3 nodes × 3 DOF (w, θₓ, θᵧ); function returns 18×18 pre-padded with zeros |
 | Shear | 18×18 | Transverse shear with drilling DOF, static condensation applied |
 
 ---
