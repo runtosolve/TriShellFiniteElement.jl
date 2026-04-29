@@ -42,14 +42,15 @@ function Ferrite.reference_shape_value(ip::IP3, ξ::Vec{2}, shape_number::Int)
 end
 
 
-# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,4,5), (6,7,8,9,10), (11,12,13,14,15))
-#organized by field u:1-9, θ:10-15
-# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,10,11), (4,5,6,12,13), (7,8,9,14,15))
-
 Ferrite.getnbasefunctions(::IP3) = 3
 
 Ferrite.adjust_dofs_during_distribution(::IP3) = false
 
+
+
+# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,4,5), (6,7,8,9,10), (11,12,13,14,15))
+#organized by field u:1-9, θ:10-15
+# Ferrite.vertexdof_indices(::IP3) = ((1,2,3,10,11), (4,5,6,12,13), (7,8,9,14,15))
 
 
 function get_jacobian(ξ, ip, x)
