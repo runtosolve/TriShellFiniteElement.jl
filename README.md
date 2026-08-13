@@ -134,3 +134,4 @@ Kg = TriShellFiniteElement.assemble_global_Kg!(Kg, dh, σXX, σYY, τXY)
 | LinearAlgebra | Matrix operations (standard library) |
 
 ---
+N
