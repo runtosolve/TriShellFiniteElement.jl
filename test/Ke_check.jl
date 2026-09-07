@@ -1,8 +1,8 @@
-using TriShellFiniteElement
-using Ferrite
-# using Arpack
-using LinearAlgebra
-using CairoMakie
+using TriShellFiniteElement, Ferrite, LinearAlgebra
+# using Ferrite
+# # using Arpack
+# using LinearAlgebra
+# using CairoMakie
 t = 1.0
 
 p = 1.0 # N/mm²              # Uniform pressure load intensity
@@ -21,7 +21,6 @@ grid = generate_grid(Ferrite.Triangle, nel, X0_Y0, XL_YL)
 nodes_3D = [Node((grid.nodes[i].x[1], grid.nodes[i].x[2], 0.0)) for i in eachindex(grid.nodes)]
 
 grid = Grid(grid.cells, nodes_3D)
-
 
 ip = Lagrange{RefTriangle,1}()
 ip6 = TriShellFiniteElement.IP6()

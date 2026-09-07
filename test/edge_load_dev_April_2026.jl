@@ -2,7 +2,7 @@ using TriShellFiniteElement
 using Ferrite
 # using Arpack
 using LinearAlgebra
-using CairoMakie
+
 t = 1.0
 
 p = 1.0 # N/mm²              # Uniform pressure load intensity
@@ -23,18 +23,36 @@ nodes_3D = [Node((grid.nodes[i].x[1], grid.nodes[i].x[2], 0.0)) for i in eachind
 grid = Grid(grid.cells, nodes_3D)
 
 
+
+
+
 ip = Lagrange{RefTriangle,1}()
 ip3 = TriShellFiniteElement.IP3()
 qr1 = QuadratureRule{RefTriangle}(1)  
 
+
+  cv = CellValues(qr3, ip6, ip3)
+    reinit!(cv, x)
+
+
 cv = CellValues(qr1, ip3, ip3)
+x = getcoordinates(cv)
+reinit!(cv, x)
+
+dNdx = cv.fun_values
+
+
+q_point = 1
+i = 1
+N = Ferrite.shape_value(cv, q_point, i)
+
 
 dh = DofHandler(grid)
 add!(dh, :u, ip^3)
 add!(dh, :θ, ip^2)
 close!(dh)
 
-
+CellIterator(dh)
 
 
 # strxx = [0.0, 0.0]
