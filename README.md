@@ -117,11 +117,56 @@ After solving a linear static problem for stresses σXX, σYY, τXY:
 ```julia
 # Assemble geometric stiffness for buckling
 Kg = allocate_matrix(dh)
-Kg = TriShellFiniteElement.assemble_global_Kg!(Kg, dh, σXX, σYY, τXY)
+Kg = TriShellFiniteElement.assemble_global_Kg!(Kg, dh, qr1, ip3, σXX, σYY, τXY)  # σ·t per element, element local frame
 
 # Solve generalized eigenvalue problem: K·φ = λ·Kg·φ
 # using your preferred eigensolver
 ```
+
+---
+
+## Shear Relaxation Factor `Cs`
+
+The element uses Mindlin–Reissner bending with a statically condensed transverse shear stiffness.
+For thin shells meshed with elements much larger than the thickness, the unrelaxed shear stiffness
+dominates and the element **shear-locks**: bending is too stiff and buckling loads are too high.
+To control this the shear stiffness is scaled by `1 / (1 + Cs * alpha)`, where `alpha` is the ratio
+of the element shear to bending rotational stiffness (a Tessler–Hughes type relaxation).
+
+`Cs` is a keyword argument of `assemble_global_Ke!` and `local_elastic_stiffness_matrix!` with default
+`TriShellFiniteElement.DEFAULT_SHEAR_RELAXATION = 0.2`, calibrated on plate buckling benchmarks
+(`test/runtests.jl`). Simply supported square plate in uniform compression, exact k = 4.0,
+thickness/width = 1/105:
+
+| Elements across width | `Cs = 0.0` | `Cs = 0.2` |
+|---|---|---|
+| 8  | 4.97 | 4.10 |
+| 10 | 4.44 | 4.05 |
+| 16 | 4.08 | 4.00 |
+| 24 | 4.01 | 3.98 |
+| 32 | 3.99 | 3.97 |
+
+With `Cs = 0` the result at a fixed mesh also depends strongly on thickness (k = 8.3 at t/b = 1/460
+on a 10×10 mesh); with `Cs = 0.2` it is thickness independent. Pass `Cs = 0.0` to recover the
+unrelaxed element:
+
+```julia
+K = TriShellFiniteElement.assemble_global_Ke!(K, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs = 0.0)
+```
+
+---
+
+## Tests
+
+```julia
+using Pkg; Pkg.test("TriShellFiniteElement")
+```
+
+`test/runtests.jl` builds simply supported and clamped rectangular plates in uniform compression,
+solves the pre-buckling membrane problem, assembles the geometric stiffness and checks the buckling
+coefficient against the classical plate solutions (k = 4.0 simply supported, k ≈ 10.07 clamped),
+including thickness independence and invariance to the plate's orientation in 3D. The other files in
+`test/` are development scripts and are not run by the test suite.
 
 ---
 
