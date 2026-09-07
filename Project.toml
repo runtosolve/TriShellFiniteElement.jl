@@ -1,6 +1,6 @@
 name = "TriShellFiniteElement"
 uuid = "4f2873d8-418d-4a23-a33c-c2fdbebf1db2"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Cris Moen <cris.moen@runtosolve.com>"]
 
 [deps]
