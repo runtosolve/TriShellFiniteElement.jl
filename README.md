@@ -11,7 +11,7 @@
   - In-plane membrane stiffness
   - Out-of-plane plate bending stiffness (Mindlin-Reissner)
   - Transverse shear stiffness with 5/6 shear correction factor
-  - Drilling DOF stabilization
+  - Drilling DOF: Hughes–Brezzi term γ∫(θᵤ − ½(∂v/∂x − ∂u/∂y))² dA (default), or a legacy penalty stiffness of 1/100 of the smallest rotational diagonal term (`drilling = :penalty`)
 - Geometric stiffness matrix for linear buckling analysis
 - Integration with [Ferrite.jl](https://ferrite-fem.github.io/Ferrite.jl/) for mesh handling and DOF management
 - Local-to-global coordinate transformation for arbitrarily oriented shell elements in 3D space
@@ -38,6 +38,13 @@ The local element stiffness is assembled from:
 | Membrane | 6×6 | Plane stress, 3 nodes × 2 DOF |
 | Bending | 9×9 | Plate bending, 3 nodes × 3 DOF (w, θₓ, θᵧ); function returns 18×18 pre-padded with zeros |
 | Shear | 18×18 | Transverse shear with drilling DOF, static condensation applied |
+| Drilling | 18×18 | Hughes–Brezzi term on the corner functions (default) or 3 diagonal penalty terms |
+
+### Drilling degree of freedom
+
+The drilling rotation θᵤ has no stiffness of its own in a Mindlin shell. `drilling = :hughes_brezzi` (default, `DEFAULT_DRILLING`) adds the Hughes & Brezzi (1989) term γ∫(θᵤ − ½(∂v/∂x − ∂u/∂y))² dA, γ = `drilling_gamma` × G t (`DEFAULT_DRILLING_GAMMA = 1.0`), integrated with the 3-point rule on the linear corner functions; it ties θᵤ to the in-plane rotation of the membrane field, so a rigid in-plane rotation is energy-free and the 18×18 matrix has exactly six zero-energy modes. `drilling = :penalty` is the legacy diagonal penalty of 1/100 of the smallest rotational diagonal term.
+
+The choice does not matter for flat plates but decides the torsional behavior of folded and curved meshes: in Saint-Venant torsion every plate strip rotates in-plane at the rate β′h, which the absolute penalty resists, so the torsion constant of a lipped C comes out far too large and grows with corner refinement; without any drilling stiffness a strip's twisting moment cannot cross a fold and every fold acts as a free edge. The Hughes–Brezzi term transfers the moment across folds and gives J within about 1 % of the exact Saint-Venant value. `test/runtests.jl` ("torsion of folded strips") twists a flat strip, the same strip folded at 5°, 30° and 90°, and a rounded lipped C with a warping-free static twist (Moen 2008, Sec. 4.2.7.3.2.3) and checks these statements. See QuadShellFiniteElement.jl for the same option on the quadrilateral element.
 
 ---
 

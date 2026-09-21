@@ -16,6 +16,34 @@ at 10 elements across a plate width while changing converged results by less tha
 """
 const DEFAULT_SHEAR_RELAXATION = 0.2
 
+"""
+    DEFAULT_DRILLING
+    DEFAULT_DRILLING_GAMMA
+
+Default treatment of the drilling (in-plane rotation) dof `θz`, used by
+[`local_elastic_stiffness_matrix!`](@ref) and [`assemble_global_Ke!`](@ref):
+
+- `:hughes_brezzi` (default): the Hughes & Brezzi (1989) drilling term
+  `γ ∫ (θz − ½(∂v/∂x − ∂u/∂y))² dA`, `γ = drilling_gamma × G × t`, integrated with the 3-point
+  rule `qr3` on the linear corner functions. It ties `θz` to the in-plane rotation of the membrane
+  displacement field, is energy-free for rigid rotations and for the true in-plane rotation of a
+  strip in Saint-Venant torsion, and lets the twisting moment of one plate strip pass across a fold
+  line into the next strip. `DEFAULT_DRILLING_GAMMA = 1.0`; results are insensitive to `γ` between
+  about 0.1 and 10 times `G t`.
+- `:penalty`: the legacy treatment, a diagonal penalty of 1/100 of the smallest rotational
+  diagonal term on each `θz`.
+
+The penalty on the absolute `θz` is fine for flat plates but wrong for folded or curved shells in
+torsion: in Saint-Venant torsion every plate strip rotates in-plane at the rate `β′ h`, which the
+penalty resists, so the torsion constant of a lipped C comes out 2 to 3 times too large and grows
+with corner refinement. Removing the penalty instead makes every fold line behave as a free edge
+for the twisting moment. The Hughes–Brezzi term gives J within about 1% of the exact Saint-Venant
+value (see `test/runtests.jl`, "torsion of folded strips", and the same test in
+QuadShellFiniteElement.jl).
+"""
+const DEFAULT_DRILLING = :hughes_brezzi
+const DEFAULT_DRILLING_GAMMA = 1.0
+
 struct IP6 <: ScalarInterpolation{RefTriangle, 2}
 end
 
@@ -290,14 +318,16 @@ end
 
 
 """
-    local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = DEFAULT_SHEAR_RELAXATION)
+    local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs, drilling, drilling_gamma)
 
 18×18 element elastic stiffness matrix in the element local frame (node dofs ordered
 `[u, v, w, θx, θy, θz]` per node). `x` holds the three planar node coordinates. `Cs` is the shear
 relaxation factor, see [`DEFAULT_SHEAR_RELAXATION`](@ref); pass `Cs = 0.0` for the unrelaxed
-Mindlin shear stiffness.
+Mindlin shear stiffness. `drilling` (`:hughes_brezzi` or `:penalty`) and `drilling_gamma` select the
+drilling dof treatment, see [`DEFAULT_DRILLING`](@ref).
 """
-function local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = DEFAULT_SHEAR_RELAXATION)
+function local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = DEFAULT_SHEAR_RELAXATION,
+                                         drilling = DEFAULT_DRILLING, drilling_gamma = DEFAULT_DRILLING_GAMMA)
 
     #####membrane
     # println("x:", x)
@@ -383,12 +413,7 @@ function local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = D
     k18 = zeros(Float64, 18, 18)
     k18[ind,ind] = k15
 
-    kd = diag(k15)
-    ind=[4 5 9 10 14 15];
-    stif=minimum(kd[ind])/100;
-    k18[6,6] = stif;
-    k18[12,12] = stif;
-    k18[18,18] = stif;
+    add_drilling_stiffness!(k18, k15, qr3, ip3, x, E, ν, t, drilling, drilling_gamma)
 
     # # transform stiffness matrix back to global X-Y-Z
 
@@ -413,14 +438,59 @@ end
 
 
 """
-    assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs = DEFAULT_SHEAR_RELAXATION)
+    add_drilling_stiffness!(k18, k15, qr3, ip3, x, E, ν, t, drilling, drilling_gamma)
+
+Add the drilling dof stiffness to the 18×18 local element matrix `k18` (node dofs `[u v w θx θy θz]`),
+see [`DEFAULT_DRILLING`](@ref). `k15` is the 15×15 matrix without drilling dofs (used by the
+`:penalty` option); the Hughes–Brezzi term is integrated with `qr3` on the linear functions `ip3`.
+"""
+function add_drilling_stiffness!(k18, k15, qr3, ip3, x, E, ν, t, drilling, drilling_gamma)
+
+    if drilling == :penalty
+        kd = diag(k15)
+        ind = [4 5 9 10 14 15]
+        stif = minimum(kd[ind]) / 100
+        k18[6, 6] = stif
+        k18[12, 12] = stif
+        k18[18, 18] = stif
+    elseif drilling == :hughes_brezzi
+        G = E / (2 * (1 + ν))
+        γ = drilling_gamma * G * t
+        cv = CellValues(qr3, ip3, ip3)
+        reinit!(cv, x)
+        row = zeros(Float64, 18)
+        for q_point in 1:getnquadpoints(cv)
+            dΩ = getdetJdV(cv, q_point)
+            fill!(row, 0.0)
+            for i in 1:3
+                dN = shape_gradient(cv, q_point, i)
+                N = shape_value(cv, q_point, i)
+                row[6(i - 1) + 1] = -0.5 * dN[2]      # u_i:  ½(∂v/∂x − ∂u/∂y)
+                row[6(i - 1) + 2] = 0.5 * dN[1]       # v_i
+                row[6(i - 1) + 6] = -N                # θz_i
+            end
+            k18 .+= γ .* (row * row') .* dΩ
+        end
+    else
+        throw(ArgumentError("drilling must be :hughes_brezzi or :penalty, got $drilling"))
+    end
+
+    return k18
+
+end
+
+
+"""
+    assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs, drilling, drilling_gamma)
 
 Assemble the global elastic stiffness matrix for a shell mesh with fields `:u` (3 translations)
 and `:θ` (3 rotations) on linear triangles. Element matrices are formed in each element's local
 frame and rotated to global coordinates. `Cs` is the shear relaxation factor, see
-[`DEFAULT_SHEAR_RELAXATION`](@ref).
+[`DEFAULT_SHEAR_RELAXATION`](@ref); `drilling` and `drilling_gamma` select the drilling dof
+treatment, see [`DEFAULT_DRILLING`](@ref).
 """
-function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs = DEFAULT_SHEAR_RELAXATION)
+function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs = DEFAULT_SHEAR_RELAXATION,
+                             drilling = DEFAULT_DRILLING, drilling_gamma = DEFAULT_DRILLING_GAMMA)
 
     assembler = start_assemble(Ke)
     for cell in CellIterator(dh)
@@ -435,7 +505,7 @@ function assemble_global_Ke!(Ke, dh, qr1, qr3, ip3, ip6, E, ν, t; Cs = DEFAULT_
 
         # println("x_local:", x_local)
 
-        ke_local = TriShellFiniteElement.local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local; Cs = Cs)
+        ke_local = TriShellFiniteElement.local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x_local; Cs, drilling, drilling_gamma)
 
         #rotate element stiffness matrix back to global coordinates!
         Te = rotation_matrix_for_element_stiffness_drilling(T)
