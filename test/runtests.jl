@@ -303,3 +303,5 @@ t = 0.0346 * 25.4     # mm (33 mil), b/t ≈ 105
         @test pc.Fnet > 1e-4
     end
 end
+
+include("plasticity_tests.jl")

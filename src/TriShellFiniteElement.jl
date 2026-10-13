@@ -1,6 +1,9 @@
 module TriShellFiniteElement
 
-using Ferrite, LinearAlgebra, Tensors
+using Ferrite, LinearAlgebra, SparseArrays, Tensors, StaticArrays
+
+export IsotropicHardening, J2PlaneStress, ShellSection, PlasticShellModel
+export assemble_internal!, commit!, restore!, solve_nonlinear, element_results, displaced_grid, lumped_mass
 
 """
     DEFAULT_SHEAR_RELAXATION
@@ -318,6 +321,60 @@ end
 
 
 """
+    local_elastic_pieces(qr1, qr3, ip3, ip6, E, ν, t, x; Cs) -> (ke_m, ke_b, ke_s)
+
+The three linear elastic building blocks of the element in its local frame: the membrane matrix
+`ke_m` (6×6, dofs `u1 v1 u2 v2 u3 v3`), the bending matrix `ke_b` (9×9, dofs `w1 θx1 θy1 …`) and
+the transverse shear matrix `ke_s` (9×9, same dofs) with the mid-side `w` dofs condensed out and
+the shear relaxation `1 / (1 + Cs alpha)` applied, see [`DEFAULT_SHEAR_RELAXATION`](@ref).
+"""
+function local_elastic_pieces(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = DEFAULT_SHEAR_RELAXATION)
+
+    #####membrane
+    cv = CellValues(qr1, ip3, ip3)
+    reinit!(cv, x)
+    Dm = calculate_membrane_constitutive_matrix(E, ν, t)
+    ke_m = calculate_element_membrane_stiffness_matrix(Dm, cv)
+
+    ######bending
+    cv = CellValues(qr1, ip3, ip3)
+    reinit!(cv, x)
+    Db = calculate_bending_constitutive_matrix(E, ν, t)
+    ke_b = calculate_element_bending_stiffness_matrix(Db, cv)
+
+    #remove zeros
+    indices = [1:10; 13; 16]
+    ke_b = ke_b[indices, indices]
+
+    ######shear
+    cv = CellValues(qr3, ip6, ip3)
+    reinit!(cv, x)
+    Ds = calculate_shear_constitutive_matrix(E, ν, t)
+    ke_s = calculate_element_shear_stiffness_matrix(Ds, cv)
+
+    #remove zeros
+    indices = [1:10; 13; 16]
+    ke_s = ke_s[indices, indices]
+
+    #static condensation of the mid-side w dofs
+    inda=1:9
+    indi=10:12
+    ke_s = ke_s[inda,inda]-ke_s[inda,indi]*inv(ke_s[indi,indi])*ke_s[indi,inda]
+    ke_b = ke_b[inda, inda]
+
+    #shear correction: ratio of the shear to bending stiffness on the corner-node rotations
+    #(dofs θx, θy of the 9-dof [w θx θy] block; the w rows must not be included, they have other
+    #units and would make alpha depend on the unit system)
+    rot = [2, 3, 5, 6, 8, 9]
+    alpha = sum(diag(ke_s[rot, rot])) / sum(diag(ke_b[rot, rot]))
+    ke_s = (1/(1+Cs*alpha))*ke_s
+
+    return ke_m, ke_b, ke_s
+
+end
+
+
+"""
     local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs, drilling, drilling_gamma)
 
 18×18 element elastic stiffness matrix in the element local frame (node dofs ordered
@@ -329,66 +386,8 @@ drilling dof treatment, see [`DEFAULT_DRILLING`](@ref).
 function local_elastic_stiffness_matrix!(qr1, qr3, ip3, ip6, E, ν, t, x; Cs = DEFAULT_SHEAR_RELAXATION,
                                          drilling = DEFAULT_DRILLING, drilling_gamma = DEFAULT_DRILLING_GAMMA)
 
-    #####membrane
-    # println("x:", x)
-
-    cv = CellValues(qr1, ip3, ip3) 
-    reinit!(cv, x)
-
-    Dm = TriShellFiniteElement.calculate_membrane_constitutive_matrix(E, ν, t)
-
-    # println("Dm:", Dm)
-
-    # D = Dm 
-    # ip_geo = ip3
-    # ip_shape = ip3
-    # qr = qr1
-    ke_m = TriShellFiniteElement.calculate_element_membrane_stiffness_matrix(Dm, cv)
-
-    # println("ke_m:", ke_m)
-
-    ######bending
-    cv = CellValues(qr1, ip3, ip3)
-    reinit!(cv, x)
-
-    Db = TriShellFiniteElement.calculate_bending_constitutive_matrix(E, ν, t)
-
-    # D = Db
-    # ip_geo = ip3
-    # ip_shape = ip3
-    # qr = qr1
-    ke_b = TriShellFiniteElement.calculate_element_bending_stiffness_matrix(Db, cv)
-
-    #remove zeros 
-    indices = [1:10; 13; 16]
-    ke_b = ke_b[indices, indices]
-
-    ######shear
-    cv = CellValues(qr3, ip6, ip3)
-    reinit!(cv, x)
-
-    Ds = TriShellFiniteElement.calculate_shear_constitutive_matrix(E, ν, t)
-
-    # D = Ds
-    # ip_geo = ip3
-    # ip_shape = ip6
-    # qr = qr3
-    ke_s = TriShellFiniteElement.calculate_element_shear_stiffness_matrix(Ds, cv)
-
-    #remove zeros 
-    indices = [1:10; 13; 16]
-    ke_s = ke_s[indices, indices]
-
-
-       #static condensation
-    inda=1:9
-    indi=10:12
-    ke_s = ke_s[inda,inda]-ke_s[inda,indi]*inv(ke_s[indi,indi])*ke_s[indi,inda]
-    ke_b = ke_b[inda, inda]
-
-    #shear correction
-    alpha=sum(diag(ke_s[4:9,4:9]))/sum(diag(ke_b[4:9,4:9]))   # shear / bending rotational stiffness ratio
-    ke_bs=(1/(1+Cs*alpha))*ke_s + ke_b
+    ke_m, ke_b, ke_s = local_elastic_pieces(qr1, qr3, ip3, ip6, E, ν, t, x; Cs)
+    ke_bs = ke_s + ke_b
 
     # ke_bs = ke_b + ke_s
 
@@ -736,6 +735,53 @@ end
 # end
 
 
+"""
+    element_membrane_stresses(dh, u, ip3, E, ν, t)
+
+Membrane stresses `σxx, σyy, τxy` (force per area, positive in tension) of each cell in its local
+frame, evaluated from the global solution vector `u` with the constant-strain triangle
+interpolation (one value per cell). Returns `(σXX, σYY, τXY)`, ready for
+[`assemble_global_Kg!`](@ref) after multiplying by the thickness. Mirrors
+`QuadShellFiniteElement.element_membrane_stresses`.
+"""
+function element_membrane_stresses(dh, u, ip3::IP3, E, ν, t)
+
+    D = calculate_membrane_constitutive_matrix(E, ν, t) ./ t
+    qr1 = QuadratureRule{RefTriangle}(1)
+    cv = CellValues(qr1, ip3, ip3)
+    ncells = getncells(dh.grid)
+    σXX = zeros(ncells); σYY = zeros(ncells); τXY = zeros(ncells)
+    B = zeros(Float64, 3, 6)
+    ul = zeros(Float64, 6)
+
+    for cell in CellIterator(dh)
+        x_global = getcoordinates(cell)
+        T = calculation_rotation_matrix(x_global)
+        x_local = global_nodal_coords_to_planar_coords(x_global, T)
+        reinit!(cv, x_local)
+
+        cd = celldofs(cell)
+        for i in 1:3
+            ug = [u[cd[3(i-1) + k]] for k in 1:3]
+            uloc = T' * ug
+            ul[2i-1] = uloc[1]
+            ul[2i]   = uloc[2]
+            dN = shape_gradient(cv, 1, i)
+            B[1, 2i-1] = dN[1]
+            B[2, 2i]   = dN[2]
+            B[3, 2i-1] = dN[2]
+            B[3, 2i]   = dN[1]
+        end
+        σ = D * B * ul
+        c = cellid(cell)
+        σXX[c] = σ[1]; σYY[c] = σ[2]; τXY[c] = σ[3]
+    end
+
+    return σXX, σYY, τXY
+
+end
+
+
 function calculation_rotation_matrix(node)
 
     P1 = node[1]
@@ -824,5 +870,9 @@ function rotation_matrix_for_element_stiffness_drilling(T3)
 
 end
 
+
+include("plasticity.jl")
+include("nonlinear.jl")
+include("solver.jl")
 
 end # module TriShellFiniteElement
