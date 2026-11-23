@@ -23,7 +23,8 @@ end
 
 Incremental Newton–Raphson solution of the nonlinear shell model over the pseudo-time
 `t ∈ [0, t_end]`, with adaptive step size. `ch` is a Ferrite `ConstraintHandler` whose Dirichlet
-conditions are functions of `t` (displacement control); `f_ext(t)` optionally returns an external
+conditions are functions of `t` (displacement control); it may also hold `AffineConstraint`s
+(e.g. a rigid end plate that translates freely: every plate dof slaved to one master node); `f_ext(t)` optionally returns an external
 load vector (load control, or both). The equilibrium residual is `r = f_int(u) − f_ext(t)`; a step
 converges when `‖r_free‖₂ ≤ max(rtol ‖f_int‖₂, atol)`. A Newton correction that increases the
 residual norm is halved up to `max_line_search` times (backtracking line search), which keeps the
@@ -58,7 +59,7 @@ function solve_nonlinear(model, ch::ConstraintHandler; reaction_dofs = Int[], f_
 
     dh = model.dh
     n = ndofs(dh)
-    K = allocate_matrix(dh)
+    K = allocate_matrix(dh, ch)      # the pattern includes the master couplings of affine constraints, if any
     f = zeros(n)
     r = zeros(n)
     u = zeros(n)
@@ -98,7 +99,9 @@ function solve_nonlinear(model, ch::ConstraintHandler; reaction_dofs = Int[], f_
         r .= K * (u_try .- u) .+ f .- fext .+ cm .* m .* (u_try .- u)
         cm > 0 && add_diagonal!(K, cm .* m)
         apply_zero!(K, r, ch)
-        u_try .-= K \ r
+        Δu0 = K \ r
+        apply_zero!(Δu0, ch)              # slave dofs of affine constraints follow their masters
+        u_try .-= Δu0
 
         converged = false
         nit = 0
@@ -118,6 +121,7 @@ function solve_nonlinear(model, ch::ConstraintHandler; reaction_dofs = Int[], f_
             end
             Δu = K \ r
             any(isnan, Δu) && break
+            apply_zero!(Δu, ch)
             # backtracking line search on the residual norm
             α = 1.0
             res_new = Inf
